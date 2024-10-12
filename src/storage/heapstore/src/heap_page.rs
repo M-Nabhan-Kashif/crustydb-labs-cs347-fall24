@@ -7,6 +7,7 @@ use std::fmt::Write;
 // todo!("Add any other imports you need here")
 
 // Add any other constants, type aliases, or structs, or definitions here
+const SLOT_SIZE:usize = 6;
 
 pub trait HeapPage {
     // Do not change these functions signatures (only the function bodies)
@@ -17,6 +18,8 @@ pub trait HeapPage {
     fn get_free_space(&self) -> usize;
 
     //Add function signatures for any helper function you need here
+    fn get_used_space(&self) -> usize;
+    fn try_compact(&mut self, slot_id: SlotId);
 }
 
 impl HeapPage for Page {
@@ -32,12 +35,47 @@ impl HeapPage for Page {
     /// They must have the same size.
     /// self.data[X..y].clone_from_slice(&bytes);
     fn add_value(&mut self, bytes: &[u8]) -> Option<SlotId> {
-        todo!("Your code here")
+        let value_size = bytes.len();
+        let required_space = value_size;
+
+        let free_space = self.get_free_space();
+        if free_space < required_space {
+            return None;
+        }
+
+        // Check for slots
+        let num_slots = self.get_slot_count();
+        for slot_id in 0..num_slots {
+            if !self.get_slot_status(slot_id as SlotId) {
+                if self.fill_slot_at(slot_id as SlotId, bytes).is_none() {
+                    return None;
+                }
+                return Some(slot_id as SlotId);
+            }
+        }
+
+        // Not enough space/free slots
+        if free_space < required_space + SLOT_SIZE {
+            return None;
+        }
+
+        if self.fill_slot_at(num_slots as SlotId, bytes).is_none() {
+            return None;
+        }
+        self.increment_slot_count();
+        return Some(num_slots as SlotId);
     }
 
     /// Return the bytes for the slotId. If the slotId is not valid then return None
     fn get_value(&self, slot_id: SlotId) -> Option<Vec<u8>> {
-        todo!("Your code here")
+        if self.get_slot_status(slot_id) {
+            let length = self.get_slot_length(slot_id);
+            let offset = self.get_slot_offset(slot_id);
+
+            let value = self.data[offset - length..offset].to_vec();
+            return Some(value);
+        }
+        None
     }
 
     /// Delete the bytes/slot for the slotId. If the slotId is not valid then return None
@@ -45,7 +83,13 @@ impl HeapPage for Page {
     /// The space for the value should be free to use for a later added value.
     /// HINT: Return Some(()) for a valid delete
     fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
-        todo!("Your code here")
+        if self.get_slot_status(slot_id) {
+            self.set_slot_unused(slot_id);
+            
+            self.try_compact(slot_id);
+            return Some(());
+        }
+        None
     }
 
     /// A utility function to determine the size of the header in the page
@@ -53,7 +97,8 @@ impl HeapPage for Page {
     /// Will be used by tests.
     #[allow(dead_code)]
     fn get_header_size(&self) -> usize {
-        todo!("Your code here")
+        let num_slots = self.get_slot_count();
+        8 + num_slots * SLOT_SIZE
     }
 
     /// A utility function to determine the total current free space in the page.
@@ -61,7 +106,46 @@ impl HeapPage for Page {
     /// Will be used by tests.
     #[allow(dead_code)]
     fn get_free_space(&self) -> usize {
-        todo!("Your code here")
+        let header_size = self.get_header_size();
+        let used_space = self.get_used_space();
+        PAGE_SIZE - header_size - used_space
+    }
+
+    /// Returns the total amount of space used in the body for values.
+    /// Ignores slots that are unused.
+    fn get_used_space(&self) -> usize {
+        let mut used_space = 0;
+        let num_slots = self.get_slot_count();
+
+        for slot_id in 0..num_slots {
+            if self.get_slot_status(slot_id as SlotId) {
+                used_space += self.get_slot_length(slot_id as SlotId);
+            }
+        }
+        used_space
+    }
+
+    /// Compaction function called after every deletion. 
+    /// Identifies all slots before deleted slot, shifts them towards the end, and updates metadata
+    fn try_compact(&mut self, slot_id: SlotId) {
+        let offset = self.get_slot_offset(slot_id);
+        let length = self.get_slot_length(slot_id);
+        let start = offset - length;
+        let page_offset = self.get_offset();
+
+        // All data before the slot shifted to the right
+        self.data.copy_within(page_offset..start, (page_offset + length) as usize);
+
+        // Fixes metadata for all slots copied/shifted
+        for id in 0..self.get_slot_count() {
+            // Change - if self.get_slot_offset(id as SlotId) > offset 
+            // The greater than symbol messed everything up :)
+            if self.get_slot_offset(id as SlotId) < offset {
+                self.set_slot_offset(id as SlotId, self.get_slot_offset(id as SlotId) + length);
+            }
+        }
+
+        self.set_offset(page_offset + length);
     }
 }
 
@@ -69,7 +153,7 @@ impl HeapPage for Page {
 /// This should iterate through all valid values of the page.
 pub struct HeapPageIntoIter {
     page: Page,
-    // todo!("Add any fields you need here")
+    current_slot: SlotId,
 }
 
 /// The implementation of the (consuming) page iterator.
@@ -79,7 +163,22 @@ impl Iterator for HeapPageIntoIter {
     type Item = (Vec<u8>, SlotId);
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!("Your code here")
+        let num_slots = self.page.get_slot_count();
+
+        // Iterate through slots starting from the current slot
+        while self.current_slot < num_slots as SlotId {
+            let slot_id = self.current_slot;
+            self.current_slot += 1;
+
+            // Check if the slot is used
+            if self.page.get_slot_status(slot_id) {
+                // Get the value from the valid slot
+                if let Some(value) = self.page.get_value(slot_id) {
+                    return Some((value, slot_id));
+                }
+            }
+        }
+        None
     }
 }
 
@@ -91,7 +190,10 @@ impl IntoIterator for Page {
     type IntoIter = HeapPageIntoIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        todo!("Your code here")
+        HeapPageIntoIter {
+            page: self,
+            current_slot: 0, // Start from the first slot
+        }
     }
 }
 
@@ -645,6 +747,7 @@ mod tests {
         let mut stored_slots: Vec<SlotId> = Vec::new();
         let mut has_space = true;
         let mut rng = rand::thread_rng();
+
         // Load up page until full
         while has_space {
             let bytes = original_vals
@@ -655,6 +758,10 @@ mod tests {
                 Some(slot_id) => {
                     stored_vals.push(bytes);
                     stored_slots.push(slot_id);
+
+                    // Debugging line to print the current offset
+                    println!("Added value. Slot: {}, Current Offset: {}", slot_id, p.get_offset());
+
                 }
                 None => {
                     // No space for this record, we are done. go ahead and stop. add back value
@@ -663,15 +770,19 @@ mod tests {
                 }
             };
         }
-        // let (check_vals, check_slots): (Vec<Vec<u8>>, Vec<SlotId>) = p.into_iter().map(|(a, b)| (a, b)).unzip();
+
         let p_clone = p.clone();
         let mut check_vals: Vec<Vec<u8>> = p_clone.into_iter().map(|(a, _)| a).collect();
+        
         assert!(compare_unordered_byte_vecs(&stored_vals, check_vals));
+        
         trace!("\n==================\n PAGE LOADED - now going to delete to make room as needed \n =======================");
-        // Delete and add remaining values until goes through all. Should result in a lot of random deletes and adds.
+        
+        // Delete and add remaining values until it goes through all. Should result in a lot of random deletes and adds.
         while !original_vals.is_empty() {
             let bytes = original_vals.pop_front().unwrap();
             trace!("Adding new value (left:{}). Need to make space for new record (len:{}).\n - Stored_slots {:?}", original_vals.len(), &bytes.len(), stored_slots);
+
             let mut added = false;
             while !added {
                 let try_slot = p.add_value(&bytes);
@@ -679,23 +790,35 @@ mod tests {
                     Some(new_slot) => {
                         stored_slots.push(new_slot);
                         stored_vals.push(bytes.clone());
+
                         let p_clone = p.clone();
                         check_vals = p_clone.into_iter().map(|(a, _)| a).collect();
+                        
+                        // Debugging output for initial load
+                        println!("Stored Values: {:?}", stored_vals);
+                        println!("Check Values: {:?}", check_vals);
                         assert!(compare_unordered_byte_vecs(&stored_vals, check_vals));
-                        trace!("Added new value ({}) {:?}", new_slot, stored_slots);
+
+                        // Debugging line to print the current offset
+                        println!("Added new value. Slot: {}, Current Offset: {}", new_slot, p.get_offset());
+
                         added = true;
                     }
                     None => {
-                        //Delete a random value and try again
+                        // Delete a random value and try again
                         let random_idx = rng.gen_range(0..stored_slots.len());
-                        trace!(
-                            "Deleting a random val to see if that makes enough space {}",
-                            stored_slots[random_idx]
-                        );
                         let value_id_to_del = stored_slots.remove(random_idx);
                         stored_vals.remove(random_idx);
+
+                        // Debugging line before deletion
+                        println!("Deleting value. Slot: {}, Current Offset before delete: {}", value_id_to_del, p.get_offset());
+
                         p.delete_value(value_id_to_del)
                             .expect("Error deleting slot_id");
+
+                        // Debugging line after deletion
+                        println!("Deleted value. Current Offset after delete: {}", p.get_offset());
+
                         trace!("Stored vals left {}", stored_slots.len());
                     }
                 }

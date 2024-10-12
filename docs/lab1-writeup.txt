@@ -1,0 +1,42 @@
+Design Decisions:
+In this implementation, I designed a Page structure to manage data and metadata within a fixed-size array, simulating memory pages in a DBMS. 
+The most significant design choice was organizing how metadata (such as page ID, slot count, and slot metadata) is stored and how data is managed in slots.
+
+Metadata Storage:
+
+Page Metadata: I used the first 6 bytes of the page for metadata:
+- Bytes 0-1: Store the page_id in little-endian format.
+- Bytes 2-3: Store the free space offset (the boundary between used and free space).
+- Bytes 4-5: Store the slot count (how many slots are active).
+Slot Metadata: For each slot, 6 bytes of metadata are stored starting from byte 8:
+- Bytes 0-1: Slot length (data size).
+- Bytes 2-3: Slot offset (where the data is located in the page).
+- Bytes 4-5: Slot usage status (1 for used, 0 for unused).
+I also defined wrapper functions to access and alter metadata values while maintaining encapsulation.
+
+Slot Data Management:
+I opted to fill the slots in a way that minimizes fragmentation.
+
+Reusing Deleted Slots: 
+When a value is deleted, the corresponding slot is marked as unused and the slot ID is reused for future insertions. This avoids allocating unnecessary new slots and ensures minimal overhead in managing slots.
+Compaction: After each deletion, I shift data towards the end of the page to reclaim space, and metadata is updated accordingly to reflect the new offsets. This way, data is consistently compacted.
+
+Iterator Implementation:
+The HeapPageIntoIter was implemented to iterate over all valid slots in ascending order by slot ID. 
+This iterator enables easy traversal of the stored values.
+
+Time Spent:
+I spent around 30 hours on this lab. 
+It took a total of 10 hours to design and code the project, 
+but around 20 hours to debug various test cases and properly implement page offset management, 
+especially for compaction and slot reuse.
+
+What I Liked/Disliked: 
+- Liked: I enjoyed the challenge of managing memory manually and implementing features like slot reuse and data compaction.
+- Disliked: Debugging the compaction algorithm was tricky, especially ensuring the slot offsets were updated correctly after data shifts.
+
+Completion Status:
+The lab is fully completed, and all tests passed successfully. 
+I faced minor issues with compaction at first due to incorrect handling of slot offsets, 
+but this was resolved by ensuring the correct shifting and metadata updates after a deletion.
+And thank you so much to Shruti for her help in debugging!
