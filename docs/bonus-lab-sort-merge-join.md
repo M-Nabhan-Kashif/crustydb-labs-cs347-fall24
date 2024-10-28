@@ -1,6 +1,7 @@
 _Due Date: Tuesday, December 10th, 2024 at 11:59 am (Noon)_
 
-No late days are allowed for the bonus lab. Any submissions after the deadline will not be graded.  
+**No late days are allowed for the bonus lab. Any submissions after the deadline will not be graded.**
+
 In this lab, you will implement the *sort-merge-join* operator in `queryexe/opiterator/sort_merge_join.rs` 
 
 ## Implementing the Sort-Merge-Join
