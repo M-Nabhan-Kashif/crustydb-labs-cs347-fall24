@@ -1,7 +1,7 @@
 _Due Date: Thursday, November 21th, 2024 at 11:59 am (Noon)_
 
-Important: make sure you use the up-to-date files in the `src/queryexe/src/opiterator` folder 
-before starting this lab!
+**Important: make sure you use the up-to-date files in the `src/queryexe/src/opiterator` folder 
+before starting this and the bonus lab!**
 
 In this lab, you will implement the *groupby-aggregate* (`src/queryexe/src/opiterator/aggregate.rs`), and *join* operators
 (`src/queryexe/src/opiterator/hash_join.rs` and `src/queryexe/src/opiterator/nested_loop_join.rs`), 
