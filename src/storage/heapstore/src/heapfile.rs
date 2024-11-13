@@ -50,14 +50,28 @@ impl HeapFile {
                 )))
             }
         };
-        panic!("TODO milestone hs");
+
+        Ok(Self {
+            file: Arc::new(RwLock::new(file)),
+            container_id,
+            read_count: AtomicU16::new(0),
+            write_count: AtomicU16::new(0),
+        })
     }
 
     /// Return the number of pages for this HeapFile.
     /// Return type is PageId (alias for another type) as we cannot have more
     /// pages than PageId can hold.
     pub fn num_pages(&self) -> PageId {
-        panic!("TODO milestone hs");
+        // panic!("TODO milestone hs");
+        let file = self.file.read().unwrap();
+        match file.metadata() {
+            Ok(metadata) => {
+                let file_size = metadata.len();
+                (file_size / PAGE_SIZE as u64) as PageId
+            }
+            Err(_) => 0,
+        }
     }
 
     /// Read the page from the file.
@@ -69,7 +83,25 @@ impl HeapFile {
         {
             self.read_count.fetch_add(1, Ordering::Relaxed);
         }
-        panic!("TODO milestone hs");
+        // panic!("TODO milestone hs");
+        let offset = (pid as u64) * (PAGE_SIZE as u64);
+        let mut file = self.file.write().unwrap();
+
+        file.seek(SeekFrom::Start(offset)).map_err(|err| {
+            CrustyError::CrustyError(format!("Failed to find page {}: {:?}", pid, err))
+        })?;
+
+        let mut buffer = vec![0u8; PAGE_SIZE];
+        file.read_exact(&mut buffer).map_err(|err| {
+            CrustyError::CrustyError(format!("Failed to read page {}: {:?}", pid, err))
+        })?;
+        let page_data: [u8; PAGE_SIZE] = buffer.try_into().map_err(|_| {
+            CrustyError::CrustyError(format!(
+                "Failed to convert buffer into page for PageId: {}",
+                pid
+            ))
+        })?;
+        std::result::Result::Ok(Page::from_bytes(page_data))
     }
 
     /// Take a page and write it to the underlying file.
@@ -85,7 +117,33 @@ impl HeapFile {
         {
             self.write_count.fetch_add(1, Ordering::Relaxed);
         }
-        panic!("TODO milestone hs");
+        //panic!("TODO milestone hs");
+        let pid = page.get_page_id();
+        let mut file = self.file.write().unwrap();
+        let offset = (pid as u64) * PAGE_SIZE as u64;
+
+        if let Err(error) = file.seek(SeekFrom::Start(offset)) {
+            return Err(CrustyError::CrustyError(format!(
+                "Error seeking page {}: {:?}",
+                pid, error
+            )));
+        }
+        let page_bytes = page.to_bytes();
+        if let Err(error) = file.write_all(page_bytes) {
+            return Err(CrustyError::CrustyError(format!(
+                "Error writing page {}: {:?}",
+                pid, error
+            )));
+        }
+
+        if let Err(error) = file.flush() {
+            return Err(CrustyError::CrustyError(format!(
+                "Error flushing file after writing page {}: {:?}",
+                pid, error
+            )));
+        }
+
+        std::result::Result::Ok(())
     }
 }
 

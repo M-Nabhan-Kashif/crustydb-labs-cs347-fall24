@@ -1,0 +1,34 @@
+HeapFile Iterator Implementation:
+The HeapFile Iterator was designed to provide a flexible way to traverse through all values in a HeapFile. 
+Key design decisions include:
+
+- Supporting iteration from the beginning of the file or from a specific ValueId
+- Lazy loading of pages to minimize memory usage
+- Handling cases where pages might be empty or unreadable
+
+Insert Value Function: 
+The insert_value function required careful consideration of how to efficiently store and manage values across pages. 
+The implementation follows these key design principles:
+
+Space Efficiency:
+- First attempt to find space in existing pages before creating a new page
+- Iterates through existing pages to find the first page with available slot
+- Avoids unnecessary page creation
+
+Page Management:
+- Uses heapfile.num_pages() to determine the current number of pages
+- Creates a new page only when no existing pages have space
+- Assigns new pages incrementally (starting from page 0)
+
+Value Size Validation:
+- Includes a panic for values larger than page size to prevent impossible insertions
+- Ensures data integrity by checking value size before insertion
+
+Time Spent:
+
+- Total Time: Approximately 15 hours
+- Complexity primarily arose from understanding Rust's ownership and borrowing concepts
+- Debugging also took around 5 hours
+
+Liked: Implementing the storage manager’s functions, especially insert_value, and handling page offsets for efficient data storage.
+Disliked: Debugging in Rust proved challenging, as I’m still getting comfortable with its memory model. Print statements were helpful but time-intensive for tracking down specific issues.

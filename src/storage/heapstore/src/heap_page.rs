@@ -7,7 +7,7 @@ use std::fmt::Write;
 // todo!("Add any other imports you need here")
 
 // Add any other constants, type aliases, or structs, or definitions here
-const SLOT_SIZE:usize = 6;
+const SLOT_SIZE: usize = 6;
 
 pub trait HeapPage {
     // Do not change these functions signatures (only the function bodies)
@@ -18,11 +18,17 @@ pub trait HeapPage {
     fn get_free_space(&self) -> usize;
 
     //Add function signatures for any helper function you need here
+    fn new(page_id: PageId) -> Self;
     fn get_used_space(&self) -> usize;
     fn try_compact(&mut self, slot_id: SlotId);
 }
 
 impl HeapPage for Page {
+    fn new(page_id: PageId) -> Self {
+        // FIX THIS
+        Page::new(page_id)
+    }
+
     /// Attempts to add a new value to this page if there is space available.
     /// Returns Some(SlotId) if it was inserted or None if there was not enough space.
     /// Note that where the bytes are stored in the page does not matter (heap), but it
@@ -85,7 +91,7 @@ impl HeapPage for Page {
     fn delete_value(&mut self, slot_id: SlotId) -> Option<()> {
         if self.get_slot_status(slot_id) {
             self.set_slot_unused(slot_id);
-            
+
             self.try_compact(slot_id);
             return Some(());
         }
@@ -125,7 +131,7 @@ impl HeapPage for Page {
         used_space
     }
 
-    /// Compaction function called after every deletion. 
+    /// Compaction function called after every deletion.
     /// Identifies all slots before deleted slot, shifts them towards the end, and updates metadata
     fn try_compact(&mut self, slot_id: SlotId) {
         let offset = self.get_slot_offset(slot_id);
@@ -134,11 +140,12 @@ impl HeapPage for Page {
         let page_offset = self.get_offset();
 
         // All data before the slot shifted to the right
-        self.data.copy_within(page_offset..start, (page_offset + length) as usize);
+        self.data
+            .copy_within(page_offset..start, (page_offset + length) as usize);
 
         // Fixes metadata for all slots copied/shifted
         for id in 0..self.get_slot_count() {
-            // Change - if self.get_slot_offset(id as SlotId) > offset 
+            // Change - if self.get_slot_offset(id as SlotId) > offset
             // The greater than symbol messed everything up :)
             if self.get_slot_offset(id as SlotId) < offset {
                 self.set_slot_offset(id as SlotId, self.get_slot_offset(id as SlotId) + length);
@@ -760,8 +767,11 @@ mod tests {
                     stored_slots.push(slot_id);
 
                     // Debugging line to print the current offset
-                    println!("Added value. Slot: {}, Current Offset: {}", slot_id, p.get_offset());
-
+                    println!(
+                        "Added value. Slot: {}, Current Offset: {}",
+                        slot_id,
+                        p.get_offset()
+                    );
                 }
                 None => {
                     // No space for this record, we are done. go ahead and stop. add back value
@@ -773,11 +783,11 @@ mod tests {
 
         let p_clone = p.clone();
         let mut check_vals: Vec<Vec<u8>> = p_clone.into_iter().map(|(a, _)| a).collect();
-        
+
         assert!(compare_unordered_byte_vecs(&stored_vals, check_vals));
-        
+
         trace!("\n==================\n PAGE LOADED - now going to delete to make room as needed \n =======================");
-        
+
         // Delete and add remaining values until it goes through all. Should result in a lot of random deletes and adds.
         while !original_vals.is_empty() {
             let bytes = original_vals.pop_front().unwrap();
@@ -793,14 +803,18 @@ mod tests {
 
                         let p_clone = p.clone();
                         check_vals = p_clone.into_iter().map(|(a, _)| a).collect();
-                        
+
                         // Debugging output for initial load
                         println!("Stored Values: {:?}", stored_vals);
                         println!("Check Values: {:?}", check_vals);
                         assert!(compare_unordered_byte_vecs(&stored_vals, check_vals));
 
                         // Debugging line to print the current offset
-                        println!("Added new value. Slot: {}, Current Offset: {}", new_slot, p.get_offset());
+                        println!(
+                            "Added new value. Slot: {}, Current Offset: {}",
+                            new_slot,
+                            p.get_offset()
+                        );
 
                         added = true;
                     }
@@ -811,13 +825,20 @@ mod tests {
                         stored_vals.remove(random_idx);
 
                         // Debugging line before deletion
-                        println!("Deleting value. Slot: {}, Current Offset before delete: {}", value_id_to_del, p.get_offset());
+                        println!(
+                            "Deleting value. Slot: {}, Current Offset before delete: {}",
+                            value_id_to_del,
+                            p.get_offset()
+                        );
 
                         p.delete_value(value_id_to_del)
                             .expect("Error deleting slot_id");
 
                         // Debugging line after deletion
-                        println!("Deleted value. Current Offset after delete: {}", p.get_offset());
+                        println!(
+                            "Deleted value. Current Offset after delete: {}",
+                            p.get_offset()
+                        );
 
                         trace!("Stored vals left {}", stored_slots.len());
                     }

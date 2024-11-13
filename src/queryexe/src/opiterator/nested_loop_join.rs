@@ -12,11 +12,8 @@ pub struct NestedLoopJoin {
     left_expr: ByteCodeExpr,
     right_expr: ByteCodeExpr,
     left_child: Box<dyn OpIterator>,
-    right_child: Box<dyn OpIterator>
-
-    // TODO: Add any other fields that you need to
-    // maintain operator state here
-
+    right_child: Box<dyn OpIterator>, // TODO: Add any other fields that you need to
+                                      // maintain operator state here
 }
 
 impl NestedLoopJoin {

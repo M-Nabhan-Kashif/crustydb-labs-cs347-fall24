@@ -96,7 +96,7 @@ impl Page {
     /// PAGE METADATA
 
     /// Setting the offest value/storing in bytes 3 and 4
-    pub fn set_offset(&mut self, offset:usize) {
+    pub fn set_offset(&mut self, offset: usize) {
         self.data[2..4].clone_from_slice(&(offset as u16).to_le_bytes());
     }
 
@@ -172,7 +172,6 @@ impl Page {
 
     /// Writing data to either an existing slot or the next slot in a linear sequencing
     pub fn fill_slot_at(&mut self, slot_id: SlotId, bytes: &[u8]) -> Option<SlotId> {
-        
         let value_size = bytes.len();
         let offset = self.get_offset();
 
@@ -189,7 +188,6 @@ impl Page {
         self.set_offset(offset - value_size);
         return Some(slot_id);
     }
-
 }
 
 impl Clone for Page {
