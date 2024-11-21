@@ -12,8 +12,10 @@ pub struct NestedLoopJoin {
     left_expr: ByteCodeExpr,
     right_expr: ByteCodeExpr,
     left_child: Box<dyn OpIterator>,
-    right_child: Box<dyn OpIterator>, // TODO: Add any other fields that you need to
-                                      // maintain operator state here
+    right_child: Box<dyn OpIterator>,
+    // maintain operator state here
+    left_tuple: Option<Tuple>,
+    open: bool,
 }
 
 impl NestedLoopJoin {
@@ -34,7 +36,16 @@ impl NestedLoopJoin {
         right_child: Box<dyn OpIterator>,
         schema: TableSchema,
     ) -> Self {
-        todo!("Your code here")
+        Self {
+            op,
+            left_expr,
+            right_expr,
+            schema,
+            left_child,
+            right_child,
+            left_tuple: None,
+            open: false,
+        }
     }
 }
 
@@ -45,20 +56,52 @@ impl OpIterator for NestedLoopJoin {
     }
 
     fn open(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        if !self.open {
+            self.left_child.open()?;
+            self.right_child.open()?;
+            self.left_tuple = self.left_child.next()?;
+            self.open = true;
+        }
+        Ok(())
     }
 
     /// Calculates the next tuple for a nested loop join.
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
-        todo!("Your code here")
+        if !self.open {
+            panic!("Operator has not been opened");
+        }
+
+        while let Some(left) = &self.left_tuple {
+            while let Some(right) = self.right_child.next()? {
+                let left_field = self.left_expr.eval(left);
+                let right_field = self.right_expr.eval(&right);
+                
+                if compare_fields(self.op, &left_field, &right_field) {
+                    let mut joined_fields = left.field_vals.to_vec();
+                    joined_fields.extend(right.field_vals);
+                    return Ok(Some(Tuple::new(joined_fields)));
+                }
+            }
+
+            // Rewind right child and fetch the next left tuple.
+            self.right_child.rewind()?;
+            self.left_tuple = self.left_child.next()?;
+        }
+        Ok(None)
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        self.left_child.close()?;
+        self.right_child.close()?;
+        self.open = false;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        self.left_child.rewind()?;
+        self.right_child.rewind()?;
+        self.left_tuple = self.left_child.next()?;
+        Ok(())
     }
 
     /// return schema of the result

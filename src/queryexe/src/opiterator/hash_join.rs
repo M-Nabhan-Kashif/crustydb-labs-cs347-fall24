@@ -17,7 +17,10 @@ pub struct HashEqJoin {
     left_child: Box<dyn OpIterator>,
     right_child: Box<dyn OpIterator>,
     // States (Need to reset on close)
-    // todo!("Your code here")
+    current_right_tuple: Option<Tuple>,
+    hash_table: HashMap<Field, Vec<Tuple>>,
+    output_tuples: Vec<Tuple>,
+    open: bool,
 }
 
 impl HashEqJoin {
@@ -37,7 +40,18 @@ impl HashEqJoin {
         left_child: Box<dyn OpIterator>,
         right_child: Box<dyn OpIterator>,
     ) -> Self {
-        todo!("Your code here")
+        Self {
+            managers,
+            schema,
+            left_expr,
+            right_expr,
+            left_child,
+            right_child,
+            hash_table: HashMap::new(),
+            current_right_tuple: None,
+            output_tuples: Vec::new(),
+            open: false,
+        }
     }
 }
 
@@ -48,19 +62,65 @@ impl OpIterator for HashEqJoin {
     }
 
     fn open(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        // Open both children
+        self.left_child.open()?;
+        self.right_child.open()?;
+        
+        // Build hash table from left child
+        while let Some(left_tuple) = self.left_child.next()? {
+            let join_key = self.left_expr.eval(&left_tuple);
+            self.hash_table.entry(join_key)
+                .or_insert_with(Vec::new)
+                .push(left_tuple);
+        }
+
+        self.open = true;
+        Ok(())
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
-        todo!("Your code here")
+        if !self.open {
+            panic!("Operator has not been opened");
+        }
+
+        // check for pending matched tuples
+        if let Some(tuple) = self.output_tuples.pop() {
+            return Ok(Some(tuple));
+        }
+
+        while let Some(right_tuple) = self.right_child.next()? {
+            let join_key = self.right_expr.eval(&right_tuple);
+        
+            if let Some(matching_tuples) = self.hash_table.get(&join_key) {
+                // Combine matching tuples and store
+                self.output_tuples.extend(matching_tuples.iter().map(|left_tuple| {
+                    let mut joined_fields = left_tuple.field_vals.clone();
+                    joined_fields.extend(right_tuple.field_vals.clone());
+                    Tuple::new(joined_fields)
+                }));
+
+                return Ok(self.output_tuples.pop());
+            }
+        }
+
+        // No more tuples to be joined
+        Ok(None)
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        self.left_child.close()?;
+        self.right_child.close()?;
+        self.hash_table.clear();
+        self.output_tuples.clear();
+        self.open = false;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
-        todo!("Your code here")
+        self.right_child.rewind()?;
+        self.output_tuples.clear();
+        self.current_right_tuple = None;
+        Ok(())
     }
 
     fn get_schema(&self) -> &TableSchema {
