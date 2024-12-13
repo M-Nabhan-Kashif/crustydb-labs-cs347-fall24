@@ -20,7 +20,11 @@ pub struct SortMergeJoin {
     will_rewind: bool,
 
     // States (Reset on close)
-    // todo!(Add the states you need to maintain here)
+    sorted_left: Vec<Tuple>,
+    sorted_right: Vec<Tuple>,
+    left_pos: usize,
+    right_pos: usize,
+    is_open: bool,
 }
 
 impl SortMergeJoin {
@@ -40,7 +44,43 @@ impl SortMergeJoin {
         if left_expr.is_empty() {
             return Err(c_err("SMJ: Join predicate cannot be empty"));
         }
-        todo!("Add your code");
+        Ok(Self {
+            managers,
+            schema,
+            left_expr,
+            right_expr,
+            left_child,
+            right_child,
+            will_rewind: false,
+
+            // Initialize states
+            sorted_left: Vec::new(),
+            sorted_right: Vec::new(),
+            left_pos: 0,
+            right_pos: 0,
+            is_open: false,
+        })
+    }
+
+    fn sort(&mut self, tuples: &mut Vec<Tuple>, expr: &ByteCodeExpr, ascending: bool) {
+        tuples.sort_by(|a, b| {
+            if ascending {
+                expr.eval(a).cmp(&expr.eval(b))
+            } else {
+                expr.eval(b).cmp(&expr.eval(a))
+            }
+        });
+    }
+
+        // Helper to advance left
+    fn advance_left(&mut self) {
+        self.left_pos += 1;
+        self.right_pos = 0;
+    }
+
+    // Helper to advance right
+    fn advance_right(&mut self) {
+        self.right_pos += 1;
     }
 }
 
@@ -53,19 +93,99 @@ impl OpIterator for SortMergeJoin {
     }
 
     fn open(&mut self) -> Result<(), CrustyError> {
-        todo!("Add your code");
+        if self.is_open {
+            return Ok(());
+        }
+        self.left_child.open()?;
+        self.right_child.open()?;
+
+        // Collect and sort left tuples
+        self.sorted_left = {
+            let mut tuples = std::iter::from_fn(|| self.left_child.next().transpose()).collect::<Result<Vec<_>, _>>()?;
+            let (left_expr, ascending) = self.left_expr[0].clone();
+            self.sort(&mut tuples, &left_expr, ascending);
+            tuples
+        };
+
+        // Collect and sort right tuples
+        self.sorted_right = {
+            let mut tuples = std::iter::from_fn(|| self.right_child.next().transpose()).collect::<Result<Vec<_>, _>>()?;
+            let (right_expr, ascending) = self.right_expr[0].clone();
+            self.sort(&mut tuples, &right_expr, ascending);
+            tuples
+        };
+
+        // Reset positions
+        self.left_pos = 0;
+        self.right_pos = 0;
+        self.is_open = true;
+
+        Ok(())
     }
 
     fn next(&mut self) -> Result<Option<Tuple>, CrustyError> {
-        todo!("Add your code");
+        if !self.is_open {
+            panic!("Cannot rewind: Operator is not open");
+        }
+
+        while self.left_pos < self.sorted_left.len() {
+            // Get current tuples
+            let left_tuple = &self.sorted_left[self.left_pos];
+            let right_tuple = 
+            if let Some(tuple) = self.sorted_right.get(self.right_pos) {
+                tuple
+            } else {
+                self.advance_left();
+                continue;
+            };
+
+            // Evaluate expressions
+            let left_value = self.left_expr[0].0.eval(left_tuple);
+            let right_value = self.right_expr[0].0.eval(right_tuple);
+            let ascending = self.left_expr[0].1;
+
+            // Compare values
+            match left_value.cmp(&right_value) {
+                std::cmp::Ordering::Less if ascending => self.advance_left(),
+                std::cmp::Ordering::Greater if !ascending => self.advance_left(),
+                std::cmp::Ordering::Greater if ascending => self.advance_right(),
+                std::cmp::Ordering::Less if !ascending => self.advance_right(),
+                std::cmp::Ordering::Equal => {
+                    let merged_tuple = left_tuple.merge(right_tuple);
+                    self.advance_right();
+                    if self.right_pos >= self.sorted_right.len() {
+                        self.advance_left();
+                    }
+                    return Ok(Some(merged_tuple));
+                }
+                _ => {}
+            }
+        }
+        Ok(None)
     }
 
     fn close(&mut self) -> Result<(), CrustyError> {
-        todo!("Add your code");
+        self.left_child.close()?;
+        self.right_child.close()?;
+        self.sorted_left.clear();
+        self.sorted_right.clear();
+        self.left_pos = 0;
+        self.right_pos = 0;
+        self.is_open = false;
+        Ok(())
     }
 
     fn rewind(&mut self) -> Result<(), CrustyError> {
-        todo!("Add your code");
+        if !self.is_open {
+            panic!("Cannot rewind: Operator is not open");
+        }
+        if self.will_rewind {
+            self.left_pos = 0;
+            self.right_pos = 0;
+        } else {
+            self.open()?;
+        }
+        Ok(())
     }
 
     fn get_schema(&self) -> &TableSchema {

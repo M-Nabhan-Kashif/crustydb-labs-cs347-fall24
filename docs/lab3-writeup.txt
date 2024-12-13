@@ -1,0 +1,28 @@
+NestedLoopJoin:
+
+- Bytecode Evaluation: The join keys for the left and right tuples are evaluated using left_expr.eval and right_expr.eval, respectively.
+- Condition Checking: The compare_fields function compares the evaluated results based on the specified join condition.
+- Output: For matching tuples, a new combined tuple is generated.
+- Optimization: The rewind method resets the right iterator after processing each left tuple, allowing efficient nested loops.
+
+HashEqJoin:
+
+- Building the Hash Table: Tuples from one child (e.g., left) are hashed using their join keys. These keys are computed using left_expr.eval, and all tuples with the same key are stored in a vector.
+- Probing the Hash Table: Tuples from the other child (e.g., right) are hashed using their join keys (right_expr.eval). Matching tuples are found in the hash table, and joined tuples are generated.
+- Data Structures: A HashMap is used to maintain the hash table, mapping join keys to lists of tuples.
+- Optimization: The hash table is constructed once during the open phase to minimize redundant computations.
+
+Aggregate:
+
+- Grouping: The groupby_expr evaluates the group key for each tuple. A hash table maps these keys to their corresponding aggregation values.
+- Aggregation Fields: The agg_expr evaluates values to aggregate. For example, for SUM(a+b), the bytecode [a][b][+] is evaluated, and the result is added to the running total for the group.
+- Aggregation Operators:
+    - SUM, COUNT, MIN, MAX: Use merge_fields to update the aggregate.
+    - AVG: Maintains both the sum and count to calculate the average.
+- Output: The hash table is converted into a set of tuples for the final result.
+
+Challenges Faced: 
+- Complex Aggregation Logic: Tracking and updating SUM, COUNT, and calculating AVG accurately proved difficult.
+- Edge Case Handling: Issues arose with empty inputs or missing groupby_expr.
+- Composite Keys: Managing and hashing multiple groupby_expr fields caused failures (test_multi_column_aggregation).
+- Debugging Complexity: Identifying issues in merge_tuple_into_group was challenging due to varied aggregation operations.

@@ -77,7 +77,7 @@ impl Aggregate {
     }
 
     pub fn merge_tuple_into_group(&mut self, tuple: &Tuple) {
-        // Evaluate group-by fields to form the key
+        // Evaluate group-by fields
         let group_key: Vec<Field> = self
             .groupby_expr
             .iter()
@@ -91,23 +91,24 @@ impl Aggregate {
             .map(|expr| expr.eval(tuple))
             .collect();
 
-        // Check if group exists, or initialize it
-        let entry = self.groups.entry(group_key).or_insert_with(|| {
-            // Initialize aggregation fields based on operations
-            self.ops
-                .iter()
-                .map(|op| match op {
-                    AggOp::Sum | AggOp::Avg | AggOp::Count => Field::Int(0),
-                    AggOp::Min => Field::Int(i64::MAX),
-                    AggOp::Max => Field::Int(i64::MIN),
-                })
-                .collect()
-        });
-
-        // Merge values into the group
-        for (i, op) in self.ops.iter().enumerate() {
-            Self::merge_fields(*op, &agg_values[i], &mut entry[i])
-                .expect("Merge fields failed");
+        if let Some(existing_values) = self.groups.get_mut(&group_key) {
+            // Merge the new values into the existing aggregation values
+            for (i, field_val) in agg_values.iter().enumerate() {
+                let op = self.ops[i];
+                let acc = &mut existing_values[i];
+                Self::merge_fields(op, field_val, acc)
+                    .expect("Failed to merge fields");
+            }
+        } else {
+            // If the group does not exist, initialize it
+            let mut initial_values = Vec::with_capacity(self.ops.len());
+            for (i, field_val) in agg_values.iter().enumerate() {
+                match self.ops[i] {
+                    AggOp::Count => initial_values.push(Field::Int(1)), // Initialize count to 1
+                    _ => initial_values.push(field_val.clone()), // Initialize other ops with the field value
+                }
+            }
+            self.groups.insert(group_key, initial_values);
         }
     }
 }

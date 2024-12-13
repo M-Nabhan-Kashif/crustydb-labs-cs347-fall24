@@ -1,0 +1,24 @@
+Solution Overview:
+
+This implementation of sort-merge-join performs equality joins with single-key join conditions. 
+First, tuples from both child operators are collected and sorted according to the provided join key and sort order. 
+Next, during the merge phase, tuples are compared based on the join key, and matching tuples are merged. 
+To handle backtracking during the merge process, the right-side iterator resets its position when the left-side iterator advances.
+
+Special care was taken to handle ascending and descending order comparisons in a consistent manner. 
+Helper functions, such as advance_left() and advance_right(), simplify state management during iteration.
+
+Design Decisions:
+
+Sorting in Memory: Given the assumption of sufficient memory, sorting was implemented in memory for simplicity and efficiency.
+Single Join Key Assumption: Since tests cover only single-key join conditions, the implementation was kept simple.
+Error Handling: Validation ensures left and right join expressions have equal length and are non-empty.
+
+Challenges and Time Spent:
+The most challenging part was implementing the backtracking logic for the merge phase while considering different sort orders. 
+Debugging the interactions between tuple comparisons and advancing iterators required extra attention. 
+This lab took approximately 10 to 12 hours to complete.
+
+Feedback:
+This lab provided a practical understanding of sort-merge join algorithms. 
+A more comprehensive test suite would enhance the process and effectiveness of the implementation.
